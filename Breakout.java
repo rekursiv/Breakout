@@ -22,8 +22,15 @@ import acm.util.*;
 import java.applet.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.logging.Level;
 
-public class Breakout extends GraphicsProgram {
+import jssc.SerialPort;
+import jssc.SerialPortEvent;
+import jssc.SerialPortEventListener;
+import jssc.SerialPortException;
+
+public class Breakout extends GraphicsProgram implements SerialPortEventListener {
+	
 
 	/** Width and height of application window in pixels */
 	public static final int APPLICATION_WIDTH = 400;
@@ -87,13 +94,60 @@ public class Breakout extends GraphicsProgram {
 
 	/** Paddle edge width percentage */
 	private static final double PADDLE_EDGE = 0.15;
+	
+	
+	
+	/** private instance variable label is used to display messages to the player */
+	private GLabel label;
+
+	/** private instance variable score is used to display score to the player */
+	private GLabel scoreBoard;
+
+	/** private instance variable paddle rectangle */
+	private GRect paddle;
+
+	/** private instance variable ball */
+	private GOval ball;
+
+	/** private instance variable random generator to generate vx for the ball and otherwise */
+	private RandomGenerator rgen = RandomGenerator.getInstance();
+
+	/** private instance variable to keep track of the velocity of the ball */
+	private double vx;
+	private double vy = VMAX;
+
+	/** private instance variable Number of bricks remaining in the game */
+	private int NBRICKS_LEFT_IN_GAME = NBRICK_ROWS * NBRICKS_PER_ROW;
+
+	/** private instance variable to count the number of paddle hits  */
+	private int paddleHits;
+
+	/** private instance variable to track score of the player */
+	private int currentScore = 0;
+
+	
+	private SerialPort serialPort;
+	
+	private void connectSerial() {
+        try {
+        	serialPort = new SerialPort("COM19");
+        	serialPort.openPort();
+        	serialPort.setParams(9600, 8, 1, 0);
+        	serialPort.addEventListener(this, SerialPort.MASK_RXCHAR);
+        } catch (SerialPortException e) {
+        	e.printStackTrace();
+        }
+	}
+	
 
 	/* Method: run() */
 	/** Runs the Breakout program. */
 	@Override
 	public void run() {
 
-		addMouseListeners();
+		connectSerial();
+		
+//		addMouseListeners();
 
 		setup();
 
@@ -110,6 +164,8 @@ public class Breakout extends GraphicsProgram {
 	/** Initial setup of the game: bricks and paddle */
 	private void setup(){
 
+		setBackground(Color.BLACK);
+		
 		setupBricks();
 
 		setupPaddle();
@@ -120,10 +176,12 @@ public class Breakout extends GraphicsProgram {
 
 		boolean hasWon = false;
 
+//		while (true) playTurn();   /// for filming
+		
 		// Start turns
 		for (int i=0 ;i<NTURNS;i++){
 
-			/* Extension: Display a message to the player to start the game */
+			// Extension: Display a message to the player to start the game 
 			showLabel("Click to serve!",Color.BLACK);
 
 			// Wait for the player to serve
@@ -139,7 +197,7 @@ public class Breakout extends GraphicsProgram {
 				break;
 			}
 		}
-
+	
 		// Extension: Show result to the player
 		showResult(hasWon);
 
@@ -400,6 +458,7 @@ public class Breakout extends GraphicsProgram {
 		double y = HEIGHT/2-BALL_RADIUS;
 
 		ball = new GOval(x,y,2*BALL_RADIUS,2*BALL_RADIUS);
+		ball.setColor(Color.WHITE);
 		ball.setFilled(true);
 		add(ball);
 	}
@@ -411,7 +470,7 @@ public class Breakout extends GraphicsProgram {
 		double x = (WIDTH-PADDLE_WIDTH)/2;
 		double y = HEIGHT -PADDLE_HEIGHT-PADDLE_Y_OFFSET;
 
-		paddle=createFilledRect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT, Color.BLACK);
+		paddle=createFilledRect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT, Color.WHITE);
 
 		add(paddle);
 
@@ -422,6 +481,7 @@ public class Breakout extends GraphicsProgram {
 
 
 	/** Called on mouse move to move the paddle */
+	/*
 	@Override
 	public void mouseMoved(MouseEvent e){
 
@@ -438,6 +498,7 @@ public class Breakout extends GraphicsProgram {
 			paddle.move(e.getX()-lastX-PADDLE_WIDTH/2,0);
 		}
 	}
+	*/
 
 	/**
 	 * Display the specified message at the center of the screen
@@ -534,33 +595,37 @@ public class Breakout extends GraphicsProgram {
 		return rect;
 
 	}
+	
+	
+	////////////////////
+	
 
-	/** private instance variable label is used to display messages to the player */
-	private GLabel label;
+	@Override
+	public void serialEvent(SerialPortEvent evt) {
+		if (evt.getEventValue()>0) {
+			try {
+				String msg = serialPort.readString();
 
-	/** private instance variable score is used to display score to the player */
-	private GLabel scoreBoard;
-
-	/** private instance variable paddle rectangle */
-	private GRect paddle;
-
-	/** private instance variable ball */
-	private GOval ball;
-
-	/** private instance variable random generator to generate vx for the ball and otherwise */
-	private RandomGenerator rgen = RandomGenerator.getInstance();
-
-	/** private instance variable to keep track of the velocity of the ball */
-	private double vx;
-	private double vy = VMAX;
-
-	/** private instance variable Number of bricks remaining in the game */
-	private int NBRICKS_LEFT_IN_GAME = NBRICK_ROWS * NBRICKS_PER_ROW;
-
-	/** private instance variable to count the number of paddle hits  */
-	private int paddleHits;
-
-	/** private instance variable to track score of the player */
-	private int currentScore = 0;
+				double stepPaddleMoveDist = 5.0;
+			
+				double pX = paddle.getLocation().getX();
+				
+				System.out.println(msg+"   "+pX+"\n");
+				
+				// Screen border coordinates
+				double rightEdge = WIDTH-PADDLE_WIDTH;
+				double leftEdge = 0;
+			
+				if (msg.startsWith("+") && pX+stepPaddleMoveDist < rightEdge) paddle.move(stepPaddleMoveDist,  0);
+				else if (msg.startsWith("-") && pX-stepPaddleMoveDist > leftEdge) paddle.move(-stepPaddleMoveDist,  0);
+				else return;
+				
+			} catch (SerialPortException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	
 
 }
